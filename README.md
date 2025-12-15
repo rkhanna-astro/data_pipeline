@@ -4,7 +4,7 @@ In this project, I have designed a skeleton of data-pipeline that continously mi
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 data_pipeline/
@@ -25,9 +25,11 @@ data_pipeline/
 └── README.md                        # This file
 ```
 
+![Pipeline Architecture](pipeline_architecture.png)
+
 ---
 
-## 🎯 What This Pipeline Does
+## What This Pipeline Does
 
 The pipeline Ideveloped solves the problem of **transforming data (tables) stored in Apache Iceberg into graph structures (vertices and edges) in TigerGraph**, potentially enabling advanced graph analytics.
 
@@ -337,7 +339,7 @@ CREATE GRAPH EcommerceGraph (User, Product, PURCHASED)
 ```
 ---
 
-## 🚀 How to Run
+## How to Run
 
 ### Prerequisites
 
@@ -412,7 +414,7 @@ PURCHASED: 2 edges
 Batch pushed to TigerGraph
 ```
 
-## 📊 Design Overview
+## Design Overview
 
 ### Architecture Diagram
 
@@ -444,7 +446,7 @@ Batch pushed to TigerGraph
 ```
 ---
 
-## ⚖️ Architecture Tradeoffs
+## Architecture Tradeoffs
 
 ### 1. Batch vs. Streaming
 
@@ -486,7 +488,7 @@ However, given the ease of implementation, Iceberg's event-driven limitations, T
 
 ---
 
-## 📚 Additional Documentation
+## Additional Documentation
 
 - **Design Document** - See `design_document.pdf` for detailed architecture analysis
 - **TigerGraph Docs** - [https://docs.tigergraph.com](https://docs.tigergraph.com)
