@@ -1,4 +1,6 @@
 from typing import List, Dict
+from models.tigergraph_models import User, Product, Purchase
+import json
 
 class TigerGraphClient:
     # Mocked Tiger Client Rest++
@@ -15,8 +17,36 @@ class TigerGraphClient:
         if vertices:
             sample = vertices[0]
             print(f"Sample: {vertex_type}({sample['v_id']}) = {sample['attributes']}")
+            objects = []
+
+            for vertice in vertices:
+                if vertex_type == 'User':
+                    user = User()
+                    user.user_id = vertice['v_id']
+
+                    attributes = vertice['attributes']
+                    user.username = attributes['username']
+                    user.created_at = attributes['created_at']
+                    user.email = attributes['email']
+                    user.country = attributes['country']
+
+                    objects.append(user)
+                
+                if vertex_type == 'Product':
+                    product = Product()
+                    product.product_id = vertice['v_id']
+
+                    attributes = vertice['attributes']
+                    product.category = attributes['category']
+                    product.price = attributes['price']
+                    product.name = attributes['name']
+
+                    objects.append(product)
         
+        json_response = json.dumps(objects)
+        print(f"This is JSON response", json_response)
         return {
+            "vertices": json_response,
             "vertex_type": vertex_type,
             "total_accepted": len(vertices),
             "total_skipped": 0
