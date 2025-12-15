@@ -1,0 +1,50 @@
+- version: "1.0"
+
+- table: "main.ecommerce.users"
+  type: vertex
+  vertex_type: User
+  primary_id: user_id
+  attributes:
+    - username
+    - email
+    - created_at
+    - country
+  # Type conversions (optional)
+  type_conversions:
+    created_at: datetime
+    user_id: string
+  
+- table: "main.ecommerce.products"
+  type: vertex
+  vertex_type: Product
+  primary_id: product_id
+  attributes:
+    - name
+    - category
+    - price
+  type_conversions:
+    product_id: string
+    price: double
+  
+  # -----------------------------------------------------------------------
+  # Edge Mappings
+  # -----------------------------------------------------------------------
+  
+- table: "main.ecommerce.transactions"
+  type: edge
+  edge_type: PURCHASED
+  from_vertex_type: User
+  to_vertex_type: Product
+  from_id: user_id
+  to_id: product_id
+  attributes:
+    - transaction_id
+    - amount
+    - timestamp
+  type_conversions:
+    user_id: string
+    product_id: string
+    transaction_id: string
+    amount: double
+    timestamp: datetime
+  
