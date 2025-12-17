@@ -147,6 +147,31 @@ def upsert_vertices(self, vertex_type: str, vertices: List[Dict], batch_size: in
 - REST++ API for real-time/incremental loading
 - Automatic batching (and retry logic in future)
 - Transform and saves data in TigerGraph DB client
+
+**Method 2: GSQL Loading Jobs** - Batch load data loads
+
+Working on a method that will allow us to batch upload vertices and edges through GSQL
+loading jobs provided by TigerGraph DB clusters
+
+```python
+create_loading_job_for_edges(
+    edge_type=edge_type,
+    from_vertex_type=from_vertex_type,
+    to_vertex_type=to_vertex_type,
+    job_name=job_name,
+    s3_file_path=s3_path,
+    columns={
+        'from_id': 'from_id',
+        'to_id': 'to_id',
+        'attributes': [k for k in columns if k not in ['from_id', 'to_id']]
+    }
+)
+```
+
+**Key capabilities**:
+- Allow batch-loading with millions of rows per second
+- Strongly supported by TigerGraph DB client
+- No need worry about duplicacy
 ---
 
 #### 3. `mapping_framework.py` - Data Transformation Engine
