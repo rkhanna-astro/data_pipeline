@@ -1,0 +1,38 @@
+from datetime import datetime
+
+MOCK_ICEBERG_DATA = {
+    "main.sales.users": [
+        {
+            "user_id": "u1",
+            "name": "Alice",
+            "email": "alice@test.com",
+            "updated_at": "2024-01-01T10:00:00"
+        },
+        {
+            "user_id": "u2",
+            "name": "Bob",
+            "email": "bob@test.com",
+            "updated_at": "2024-01-02T10:00:00"
+        }
+    ],
+
+    "main.sales.products": [
+        {
+            "product_id": "p1",
+            "name": "Book",
+            "price": 12.5,
+            "updated_at": "2024-01-01T09:00:00"
+        }
+    ],
+
+    "main.sales.purchases": [
+        {
+            "purchase_id": "t1",
+            "user_id": "u1",
+            "product_id": "p1",
+            "amount": 12.5,
+            "ts": datetime(2024, 1, 1, 12, 0),
+            "updated_at": "2024-01-01T12:01:00"
+        }
+    ]
+}
