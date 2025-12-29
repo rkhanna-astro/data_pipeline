@@ -139,22 +139,22 @@ class MappingEngine:
 
         return value
 
-    def get_summary(self) -> str:
-        lines = []
+    # def get_summary(self) -> str:
+    #     lines = []
 
-        for table, (mtype, mapping) in self.mappings.items():
-            lines.append(f"Table: {table}")
+    #     for table, (mtype, mapping) in self.mappings.items():
+    #         lines.append(f"Table: {table}")
 
-            if mtype == "vertex":
-                lines.append(f"  Vertex: {mapping.vertex_type}")
-                lines.append(f"  Primary ID: {mapping.primary_id}")
-                lines.append(f"  Attributes: {', '.join(mapping.attributes)}")
+    #         if mtype == "vertex":
+    #             lines.append(f"  Vertex: {mapping.vertex_type}")
+    #             lines.append(f"  Primary ID: {mapping.primary_id}")
+    #             lines.append(f"  Attributes: {', '.join(mapping.attributes)}")
 
-            else:
-                lines.append(f"  Edge: {mapping.edge_type}")
-                lines.append(
-                    f"  From {mapping.from_vertex_type}({mapping.from_id}) "
-                    f"To {mapping.to_vertex_type}({mapping.to_id})"
-                )
+    #         else:
+    #             lines.append(f"  Edge: {mapping.edge_type}")
+    #             lines.append(
+    #                 f"  From {mapping.from_vertex_type}({mapping.from_id}) "
+    #                 f"To {mapping.to_vertex_type}({mapping.to_id})"
+    #             )
 
-        return "\n".join(lines)
+    #     return "\n".join(lines)

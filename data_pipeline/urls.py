@@ -21,4 +21,3 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('apache_spark_pipeline.urls')),
 ]
-

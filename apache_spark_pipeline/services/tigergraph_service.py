@@ -2,10 +2,8 @@ from typing import Dict, List
 
 class TigerGraphService:
     def __init__(self):
-        # VertexType -> { vertex_id -> attributes }
         self.vertices: Dict[str, Dict[str, Dict]] = {}
 
-        # EdgeType -> List[edge]
         self.edges: Dict[str, List[Dict]] = {}
 
     def load_vertices(self, payload: Dict):
