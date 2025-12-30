@@ -1,0 +1,168 @@
+openapi: 3.0.3
+info:
+  title: Data Pipeline API (apache_spark_pipeline)
+  version: "1.0.0"
+  description: |
+    REST API to orchestrate a mocked Apache Iceberg → TigerGraph pipeline.
+    Endpoints trigger batch / micro-batch syncs and return in-memory vertices & edges.
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/sync/batch/:
+    get:
+      summary: Trigger a full batch sync
+      description: |
+        Runs a full batch ingestion pipeline that reads mock Iceberg tables,
+        transforms rows to vertices & edges via the mapping engine and loads them
+        into the in-memory TigerGraph mock.
+      responses:
+        '200':
+          description: Batch sync completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+      tags:
+        - sync
+  /api/sync/micro/:
+    get:
+      summary: Trigger a micro-batch sync
+      description: |
+        Runs a micro-batch ingestion filtering records with updated_at > last_timestamp.
+        `last_timestamp` must be a valid ISO 8601 string.
+      parameters:
+        - in: query
+          name: last_timestamp
+          required: true
+          schema:
+            type: string
+            format: date-time
+            example: "2026-01-10T00:00:00"
+          description: ISO 8601 timestamp used to filter `updated_at` fields.
+      responses:
+        '200':
+          description: Micro-batch sync completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '400':
+          description: Missing or invalid timestamp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      tags:
+        - sync
+  /api/graph/users/:
+    get:
+      summary: Get loaded User vertices
+      description: Returns a mapping of user_id -> attributes. Data is served from the in-memory TigerGraph mock.
+      responses:
+        '200':
+          description: Map of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerticesById'
+      tags:
+        - graph
+  /api/graph/products/:
+    get:
+      summary: Get loaded Product vertices
+      description: Returns a mapping of product_id -> attributes.
+      responses:
+        '200':
+          description: Map of products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerticesById'
+      tags:
+        - graph
+  /api/graph/purchases/:
+    get:
+      summary: Get PURCHASED edges
+      description: Returns a list of PURCHASED edges stored in the TigerGraph mock.
+      responses:
+        '200':
+          description: List of edges
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Edge'
+      tags:
+        - graph
+components:
+  schemas:
+    SyncResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "Batch sync completed"
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "No Timestamp specified"
+    VerticesById:
+      type: object
+      additionalProperties:
+        type: object
+        description: attributes for the vertex
+      example:
+        u1:
+          name: "User-1"
+          email: "user1@example.com"
+          updated_at: "2026-01-02T10:00:00"
+    Vertex:
+      type: object
+      properties:
+        id:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: {}
+    Edge:
+      type: object
+      properties:
+        from_type:
+          type: string
+          example: "User"
+        from_id:
+          type: string
+          example: "u1"
+        to_type:
+          type: string
+          example: "Product"
+        to_id:
+          type: string
+          example: "p1"
+        attributes:
+          type: object
+          additionalProperties: {}
+      required:
+        - from_type
+        - from_id
+        - to_type
+        - to_id
+tags:
+  - name: sync
+    description: Endpoints to trigger ingestion runs (batch & micro)
+  - name: graph
+    description: Query the in-memory graph (vertices & edges)
+
+infox:
+  note: |
+    Implementation references:
+      - Views: apache_spark_pipeline/views.py -> [`apache_spark_pipeline.views.sync_batch`, `apache_spark_pipeline.views.sync_micro`, `apache_spark_pipeline.views.users`, `apache_spark_pipeline.views.products`, `apache_spark_pipeline.views.purchases`]
+      - Sync orchestrator: apache_spark_pipeline/services/sync_service.py -> [`apache_spark_pipeline.services.sync_service.run_sync`]
+      - Mapping: apache_spark_pipeline/services/mapping_service.py -> [`apache_spark_pipeline.services.mapping_service.MappingEngine`]
+      - TigerGraph mock: apache_spark_pipeline/services/tigergraph_service.py -> [`apache_spark_pipeline.services.tigergraph_service.TigerGraphService`]
+      - Spark mocks: apache_spark_pipeline/services/apache_spark_service.py -> [`apache_spark_pipeline.services.apache_spark_service.SparkService`]
+      - Unity catalog & mocks: apache_spark_pipeline/helpers/unity_data_catalog.py -> [`apache_spark_pipeline.helpers.unity_data_catalog.UnityCatalog`]
+      - Mappers: apache_spark_pipeline/helpers/mappers.py -> [`apache_spark_pipeline.helpers.mappers.USER_VERTEX`, `apache_spark_pipeline.helpers.mappers.PRODUCT_VERTEX`, `apache_spark_pipeline.helpers.mappers.PURCHASE_EDGE`]

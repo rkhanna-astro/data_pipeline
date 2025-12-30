@@ -36,9 +36,9 @@ def run_sync(mode="batch", last_ts=None):
 
     print("Transformed", users_payload)
 
-    tg.load_vertices(users_payload)
-    tg.load_vertices(products_payload)
-    tg.load_edges(purchases_payload)
+    tg.upsert_vertices(users_payload)
+    tg.upsert_vertices(products_payload)
+    tg.upsert_edges(purchases_payload)
 
     spark_service.stop_service()
 

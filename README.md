@@ -4,34 +4,32 @@ In this project, I have designed a skeleton of data-pipeline that continously mi
 
 ---
 
-## Project Structure
+## Table of contents
 
-```
-data_pipeline/
-├── config/
-│   ├── table_mappings.yaml          # Table to graph mapping definitions
-├── schemas/
-│   └── tigergraph_schema.gsql         # TigerGraph graph schema (DDL)
-├── models/
-│   └── iceberg_table_models.py      # Iceberg Data classes
-│   └── tigergraph_models.py         # TigerGraph Data classes
-├── unity_catalog_framework.py       # Unity Catalog client (Iceberg metadata)
-├── tigergraph_client_framework.py   # TigerGraph client (graph loading)
-├── mapping_framework.py             # Iceberg → Graph transformation logic
-├── spark_batching_framework.py      # Spark batch/micro-batch processing
-├── main.py                          # Application entry point
-├── design_document.pdf              # Detailed architecture documentation
-├── .env.example                     # Environment variables template
-└── README.md                        # This file
-```
+- Data Pipeline Project
+- Data Architecture Diagram
+- Functionality 
+- Core Components
+- API workflow (endpoints)
+- Files & locations
+- Quick usage examples
+- Testing
+- Setup
+- Design Decision
+- Development notes & next steps
+- Additional Documentation
+
+---
+
+## Data Architecture Diagram
 
 ![Pipeline Architecture](pipeline_architecture.png)
 
 ---
 
-## What This Pipeline Does
+## Functionality 
 
-The pipeline Ideveloped solves the problem of **transforming data (tables) stored in Apache Iceberg into graph structures (vertices and edges) in TigerGraph**, potentially enabling advanced graph analytics.
+The pipeline I developed solves the problem of **transforming data (tables) stored in Apache Iceberg into graph structures (vertices and edges) in TigerGraph**, potentially enabling advanced graph analytics.
 
 **Key Features:**
 - **Scalable**: Processes millions of records using Apache Spark and pushes data to TigerGraphDB
@@ -39,477 +37,447 @@ The pipeline Ideveloped solves the problem of **transforming data (tables) store
 - **Governed**: Unity Catalog provides access control and lineage tracking
 - **Configuration-driven**: Add new tables without code changes
 
----
-
-## Component Overview
-
-### Core Components
-
-#### 1. `unity_catalog_framework.py` - Data Source Interface
-
-**Purpose**: Connects to Databricks Unity Catalog to access Iceberg table metadata and read data.
-
-**Main Component**:
-```python
-# Fetches table schema, location, columns
-# metadata = uc_client.get_table_metadata("main.ecommerce.users")
-
-# Reads actual data from Iceberg (Parquet files on S3)
-# records = uc_client.read_table_data(metadata, limit=1000000)
-
-def get_table_metadata(self, full_table_name: str) -> IcebergTableMetadata:
-        print(f"Fetching metadata: {full_table_name}")
-        data = self._mock_api_response(full_table_name)
-        
-        metadata = IcebergTableMetadata(
-            catalog_name=data["catalog_name"],
-            schema_name=data["schema_name"],
-            table_name=data["name"],
-            table_type=data["table_type"],
-            data_source_format=data["data_source_format"],
-            storage_location=data["storage_location"],
-            columns=[
-                IcebergColumn(name=col["name"], type_name=col["type_name"],
-                            nullable=col.get("nullable", True), comment=col.get("comment"))
-                for col in data["columns"]
-            ],
-            properties=data.get("properties", {})
-        )
-        return metadata
-```
-
-**Capabilities**:
-- Retrieves table metadata (schema, S3 location, column types)
-- Reads Iceberg data files
-- Handles Unity Catalog authentication and permissions
-- Supports incremental reads via Iceberg snapshots
 
 ---
 
-#### 2. `tigergraph_client_framework.py` - Graph Database Interface
+## Core Components
 
-**Purpose**: Communicates with TigerGraph to load graph data using two optimized methods.
+Below are the main modules, their responsibilities, inputs and outputs.
 
-**Two Loading Methods**:
+1. API views (HTTP entry points through apache_spark application)
+    - Files: 
+        - `apache_spark_pipeline/views.py` 
+        - `apache_spark_pipeline/urls.py`
+    - Responsibilities:
+        - Expose endpoints described above.
+        - Validate micro-batch `last_timestamp` (via `datetime.fromisoformat` in views).
+        - Invoke the central `run_sync` spark job
+        - Return JSON responses and graph data from the TigerGraph client
 
-**Method 1: REST++ API** - For incremental updates
-```python
-# Good for real-time or micro-batch uploads
-# throughput: ~10,000 records/second
-# best for: Hourly updates, real-time ingestion
+2. Sync orchestration
+    - Files: 
+        - `apache_spark_pipeline/services/sync_service.py`
+    - Responsibilities:
+        - Handle a full pipeline run: read tables, transform, and load.
+        - Registers mapping definitions (USER_VERTEX, PRODUCT_VERTEX, PURCHASE_EDGE).
+        - Converts SparkDataFrame rows into TigerGraph (in-memory) records.
+        - Calls MappingEngine to produce TigerGraph compatible data format.
+        - Calls TigerGraph client to upsert vertices and edges.
+    - Inputs: mode ("batch" or "micro") and optional timestamp for micro.
 
-# client.upsert_vertices("User", vertices_list, batch_size=1000)
-# client.upsert_edges("PURCHASED", edges_list, batch_size=1000)
+3. Spark service
+    - Files: 
+        - `apache_spark_pipeline/services/apache_spark_service.py`
+    - Responsibilities:
+        - Provide `read_batch(table)` and `read_microbatch(table, last_ts)` methods that return `SparkDataFrame` mock.
+        - Wrap UnityCatalog and Spark (dataframe) behavior behind one interface.
+        - `stop_service()` upon the job completion.
 
-def upsert_vertices(self, vertex_type: str, vertices: List[Dict], batch_size: int = 1000) -> Dict:
-        print(f"Upserting {len(vertices)} {vertex_type} vertices")
-        
-        if vertices:
-            sample = vertices[0]
-            print(f"Sample: {vertex_type}({sample['v_id']}) = {sample['attributes']}")
-            objects = []
+4. Unity Catalog + Spark mocks
+    - Files:
+        - `apache_spark_pipeline/helpers/unity_data_catalog.py` (UnityCatalog)
+        - `apache_spark_pipeline/helpers/spark.py` (Spark)
+        - `apache_spark_pipeline/helpers/spark_data_frame.py` (SparkDataFrame)
+    - Responsibilities:
+        - UnityCatalog returns a SparkDataFrame for predefined mock table names.
+        - Spark wraps datasets into list of objects of SparkDataFrame; SparkDataFrame supports `.filter(expr)` and `.collect()`.
+        - Filter supports simple ISO timestamp comparison on `updated_at`
 
-            for vertice in vertices:
-                if vertex_type == 'User':
-                    user = User()
-                    user.user_id = vertice['v_id']
+5. Mapping layer (transformation engine)
+    - Files:
+        - `apache_spark_pipeline/services/mapping_service.py` (MappingEngine)
+        - `apache_spark_pipeline/helpers/tigergraph_models.py` (VertexMapping, EdgeMapping dataclasses)
+        - `apache_spark_pipeline/helpers/mappers.py` (predefined USER, PRODUCT, PURCHASE mappings)
+    - Responsibilities:
+        - Maintain a registry of mappings by source table.
+        - Convert records into TigerGraph-compatible payloads:
+        - Vertex payload: { "vertices": { VertexType: { id: attributes } } }
+        - Edge payload: { "edges": { EdgeType: [ { from_type, from_id, to_type, to_id, attributes } ] } }
+        - Perform type conversions: string, int, double, bool, datetime (datetime normalized to ISO).
+        - per-record error handling.
 
-                    attributes = vertice['attributes']
-                    user.username = attributes['username']
-                    user.created_at = attributes['created_at']
-                    user.email = attributes['email']
-                    user.country = attributes['country']
+6. TigerGraph mock and singleton client
+    - Files:
+        - `apache_spark_pipeline/services/tigergraph_service.py` (in-memory client)
+        - `apache_spark_pipeline/services/tigergraph_singleton.py` (TIGERGRAPH_CLIENT)
+    - Responsibilities:
+        - Store `vertices` as mapping vertex_type -> list of vertex objects
+        - Store `edges` as mapping edge_type -> list of edge objects
+        - Provide `upsert_vertices(payload)`, `upster_edges(payload)`, `fetch_vertices(vtype)`, `fetch_edges(etype)`
 
-                    objects.append(user)
-                
-                if vertex_type == 'Product':
-                    product = Product()
-                    product.product_id = vertice['v_id']
+7. Mock datasets and utilities
+    - Files:
+        - `apache_spark_pipeline/helpers/mock_iceberg_data.py`
+        - `apache_spark_pipeline/helpers/mock_users.py`, `mock_products.py`, `mock_purchases.py`
+    - Responsibilities:
+        - Provide test users, products, purchaes datasets (with ISO timestamps) used for tests/demo runs.
 
-                    attributes = vertice['attributes']
-                    product.category = attributes['category']
-                    product.price = attributes['price']
-                    product.name = attributes['name']
-
-                    objects.append(product)
-        
-        json_response = json.dumps(objects)
-        print(f"This is JSON response", json_response)
-        return {
-            "vertices": json_response,
-            "vertex_type": vertex_type,
-            "total_accepted": len(vertices),
-            "total_skipped": 0
-        }
-```
-
-**Key capabilities**:
-- REST++ API for real-time/incremental loading
-- Automatic batching (and retry logic in future)
-- Transform and saves data in TigerGraph DB client
-
-**Method 2: GSQL Loading Jobs** - Batch load data loads
-
-Working on a method that will allow us to batch upload vertices and edges through GSQL
-loading jobs provided by TigerGraph DB clusters
-
-```python
-create_loading_job_for_edges(
-    edge_type=edge_type,
-    from_vertex_type=from_vertex_type,
-    to_vertex_type=to_vertex_type,
-    job_name=job_name,
-    s3_file_path=s3_path,
-    columns={
-        'from_id': 'from_id',
-        'to_id': 'to_id',
-        'attributes': [k for k in columns if k not in ['from_id', 'to_id']]
-    }
-)
-```
-
-**Key capabilities**:
-- Allow batch-loading with millions of rows per second
-- Strongly supported by TigerGraph DB client
-- No need worry about duplicacy
+8. TigerGraph Data Schema
+    - Files:
+        - `schemas/ecommerce_graph.gsql`
+    - Responsibilities:
+        - Defines the TigerGraph graph structure (vertices, edges, graph). 
+        - Note: This needs to be created and exectued to create a graph before pushing data into TigerGraph DB clusters.
 ---
 
-#### 3. `mapping_framework.py` - Data Transformation Engine
+## API Workflow (endpoints)
 
-**Purpose**: Transforms Iceberg data (rows/columns) into graph data (vertices/edges).
+The API format is highly influenced from TigerGraph Documentation. The JSON responses for fetching or listing vertices and
+edges is inspired from [TigerGraph List Vertices API](https://docs.tigergraph.com/tigergraph-server/4.2/api/built-in-endpoints#_list_vertices) and [TigerGraph List Edges API](https://docs.tigergraph.com/tigergraph-server/4.2/api/built-in-endpoints#_list_edges_of_a_vertex).
 
-**Example transformation**:
-```python
-# Relational record
-{
-    "user_id": 12345,
-    "username": "alice",
-    "email": "alice@example.com",
-    "created_at": "2024-01-15T10:30:00Z"
-}
+- GET /api/sync/batch/
+  - Handler: [`apache_spark_pipeline.views.sync_batch`](apache_spark_pipeline/views.py)
+  - Triggers a full batch pipeline run: [`apache_spark_pipeline.services.sync_service.run_sync`](apache_spark_pipeline/services/sync_service.py) with mode `"batch"`.
+  - Response example: `{ "status": "Batch sync completed" }` (200).
 
-# Transformed to Graph vertex
-{
+- GET /api/sync/micro/?last_timestamp
+  - Handler: [`apache_spark_pipeline.views.sync_micro`](apache_spark_pipeline/views.py)
+  - Requires query param `last_timestamp` (ISO 8601). The view validates via Python `datetime.fromisoformat`.
+  - On success runs [`run_sync`](apache_spark_pipeline/services/sync_service.py) with mode `"micro"` and the provided timestamp.
+  - Responses:
+    - 200 `{ "status": "Micro-batch sync completed" }`
+    - 400 when `last_timestamp` missing or invalid.
+
+- GET /api/graph/users/
+  - Handler: [`apache_spark_pipeline.views.users`](apache_spark_pipeline/views.py)
+  - Return a list of `User` vertices as JSON response.
+  - Response Example:
+```json 
+[
+  {
     "v_type": "User",
-    "v_id": "12345",           
+    "v_id": "u19",
     "attributes": {
-        "username": "alice",
-        "email": "alice@example.com",
-        "created_at": "2024-01-15 10:30:00"  # datetime
+      "name": "User-19",
+      "email": "user19@example.com",
+      "updated_at": "2026-01-20T10:00:00"
     }
-}
+  },
+  {
+    "v_type": "User",
+    "v_id": "u20",
+    "attributes": {
+      "name": "User-20",
+      "email": "user20@example.com",
+      "updated_at": "2026-01-21T10:00:00"
+    }
+  },
+]
 ```
-**Key capabilities**:
-- Type conversion (e.g., `int` → `string` for IDs)
-- Timestamp formatting (`ISO8601` → `YYYY-MM-DD HH:MM:SS`)
-- Configuration-driven (dependent on )
 
-**Why do we need strict mapping conversions?**:
-- TigerGraph IDs should be strings (flexible, no overflow)
-- Timestamps need specific datetime format (datetime in Python)
-- Decimal types converted to double
+- GET /api/graph/products/
+  - Handler: [`apache_spark_pipeline.views.products`](apache_spark_pipeline/views.py)
+  - Returns a list of `Product` vertices as JSON response.
+```json
+[
+  {
+    "v_type": "Product",
+    "v_id": "p10",
+    "attributes": {
+      "name": "Product-10",
+      "price": 25,
+      "updated_at": "2026-01-21T09:00:00"
+    }
+  },
+  {
+    "v_type": "Product",
+    "v_id": "p11",
+    "attributes": {
+      "name": "Product-11",
+      "price": 26.5,
+      "updated_at": "2026-01-23T09:00:00"
+    }
+  },
+  {
+    "v_type": "Product",
+    "v_id": "p12",
+    "attributes": {
+      "name": "Product-12",
+      "price": 28,
+      "updated_at": "2026-01-25T09:00:00"
+    }
+  },
+]
+```
+
+- GET /api/graph/purchases/
+  - Handler: [`apache_spark_pipeline.views.purchases`](apache_spark_pipeline/views.py)
+  - Returns list of `PURCHASED` edges as JSON response.
+```json
+[
+  {
+    "e_type": "PURCHASED",
+    "directed": false,
+    "from_type": "User",
+    "from_id": "u99",
+    "to_type": "Product",
+    "to_id": "p48",
+    "attributes": {
+      "amount": 186.01,
+      "updated_at": "2026-01-20T11:00:00",
+      "ordered_at": "2026-01-20T11:00:00"
+    }
+  },
+  {
+    "e_type": "PURCHASED",
+    "directed": false,
+    "from_type": "User",
+    "from_id": "u150",
+    "to_type": "Product",
+    "to_id": "p4",
+    "attributes": {
+      "amount": 228.68,
+      "updated_at": "2026-01-21T11:00:00",
+      "ordered_at": "2026-01-21T11:00:00"
+    }
+  },
+]
+
+```
 
 ---
 
-#### 4. `spark_batching_framework.py` - Pipeline Orchestration
+## Quick usage examples
 
-**Purpose**: Using Apache Spark we perform end-to-end ETL job incorporating parallel, scalable processing given by Apache Spark.
-
-**SparkRestPipeline** - For incremental updates
-```
-Process:
-1. Read Iceberg table via Spark
-2. Partition data for parallel processing
-3. Transform in micro-batches (10K records)
-4. Push to TigerGraph via REST++ API
-
-Best for:
-- Hourly/real-time updates
-- small number of reacords (~10000)
-- Simple setup (no S3 staging)
-```
-
-```python
-def push_vertices_to_tigergraph(self, vertices: List[Dict]):
-        if vertices:
-            vertices_by_type = {}
-            for v in vertices:
-                vertices_by_type.setdefault(v['v_type'], []).append(v)
-            
-            for vtype, vlist in vertices_by_type.items():
-                # REST++ API call to push new vertices to TigerGraphDB
-                # POST http://localhost:9000/graph/ecommerce
-                result = self.tigergraph_client.upsert_vertices(vtype, vlist, batch_size=1000)
-                print(f"{vtype}: {result['total_accepted']} vertices")
-        
-    def push_edges_to_tigergraph(self, edges: List[Dict]):
-        if edges:
-            edges_by_type = {}
-            for e in edges:
-                edges_by_type.setdefault(e['e_type'], []).append(e)
-            
-            for etype, elist in edges_by_type.items():
-                # POST http://localhost:9000/graph/ecommerce
-                result = self.tigergraph_client.upsert_edges(etype, elist, batch_size=1000)
-                print(f"{etype}: {result['total_accepted']} edges")
-```
-
-**SparkGSQLPipeline** - For bulk loads
-```
-Under Construction
-```
-
-**Advantages of using Spark**:
-- Parallel processing (multiple executors)
-- Memory-efficient micro-batching
-- Automatic retries on failure
-- Horizontal scalability
-
----
-
-#### 5. `main.py` - Application Entry Point
-
-**Purpose**: Initializes all components and runs the pipeline.
-
-**What it does**:
-```
-Load environment variables (.env)
-Initialize Unity Catalog client
-Initialize TigerGraph client
-Configure mappings from YAML
-Choose pipeline method (REST++)
-Execute pipeline
-```
-
-**Usage**:
+Trigger a batch sync:
 ```bash
-python main.py
-
-# The pipeline in the end create Python Objects in memory (User, Product) which acts as 
-# vertices and edges created in TigerGraphDB.
+curl -s -X GET http://localhost:8000/api/sync/batch/
+# -> {"status":"Batch sync completed"}
 ```
 
-```python
-    pipeline = SparkBatchPipeline(
-            uc_client=unity_catalog_client,
-            tg_client=tiger_graph_client,
-            mapper=mapper,
-            tables=[
-                "main.ecommerce.users",
-                "main.ecommerce.products",
-                "main.ecommerce.transactions"
-            ],
-            micro_batch_size=2,  # Small batch size for demo (maybe much higher in real-life prod)
-            parallelism=2  # Number of Spark partitions (higher for production)
-        )
+Trigger a micro-batch sync basted on a certain timestamp:
+```bash
+curl -s -G http://localhost:8000/api/sync/micro/ --data-urlencode "last_timestamp=2026-01-20"
+# -> {"status":"Micro-batch sync completed"}
 ```
+
+Query loaded user vertices:
+```bash
+curl -s http://localhost:8000/api/graph/users/
+# JSON object mapping user_id - attributes
+```
+
+Query loaded products vertices:
+```bash
+curl -s http://localhost:8000/api/graph/products/
+# JSON object mapping product_id - attributes
+```
+
+Query loaded purchases edges:
+```bash
+curl -s http://localhost:8000/api/graph/purchases/
+# JSON object containing list of purchase edges mapped to attributes (ordered_at)
+```
+
+## Testing & Coverage
+
+Currently, the test coverage has achieved **94%** coverage [Refer: htmlcov/index.html].
+
+Run tests with pytest:
+```bash
+pip install -r requirements.txt   # if present
+python3 -m pytest --cov=apache_spark_pipeline --cov-report=html
+```
+
+Tests cover:
+- Mapping behavior (`tests/test_mapping_service.py`)
+- Spark service mock & filtering (`tests/test_apache_spark_service.py`)
+- TigerGraph mock load/fetch (`tests/test_tigergraph_service.py`)
+- End-to-end sync orchestration (`tests/test_sync_service.py`)
+- Views / API behavior (`tests/test_views.py`)
 ---
 
-### Configuration Files
-
-#### `config/table_mappings.yaml`
-
-**Purpose**: Defines how Iceberg tables map to TigerGraph graph elements.
-
-**Example**:
-```yaml
-version: "1.0"
-
-mappings:
-  # Vertex mapping: users table → User vertices
-  - table: "main.ecommerce.users"
-    type: vertex
-    vertex_type: User
-    primary_id: user_id
-    attributes:
-      - username
-      - email
-      - created_at
-      - country
-    type_conversions:
-      user_id: string        # Convert bigint to string
-      created_at: datetime   # Format timestamp
-```
-
-**Advantage**: Just add a new mapping in this yaml and no further code changes needed
-
----
-
-#### `schemas/ecommerce_graph.gsql`
-
-**Purpose**: Defines the TigerGraph graph structure (vertices, edges, graph). This needs to be created and exectued to create a graph before pushing data into TigerGraph DB clusters.
-
-**Example**:
-```sql
--- create vertex
-CREATE VERTEX User (
-    PRIMARY_ID user_id STRING,
-    username STRING,
-    email STRING,
-    created_at DATETIME,
-    country STRING
-) WITH primary_id_as_attribute="true"
-
--- create edge
-CREATE DIRECTED EDGE PURCHASED (
-    FROM User,
-    TO Product,
-    transaction_id STRING,
-    amount DOUBLE,
-    timestamp DATETIME
-) WITH REVERSE_EDGE="PURCHASED_BY"
-
--- create graph
-CREATE GRAPH EcommerceGraph (User, Product, PURCHASED)
-```
----
-
-## How to Run
-
-### Prerequisites
-
-- **Python 3.2+**
-- **Desired Access (needed in production or live environments)**:
-  - Databricks workspace with Unity Catalog
-  - TigerGraph instance (v3.0+)
-  - AWS S3 (for GSQL staging)
-- **Credentials** for all services
-
-### Step 1: Install Dependencies
+## Setup
 
 ```bash
-# Clone repository
-git clone https://github.com/rkhanna-astro/data_pipeline.git
+git clone git@github.com:rkhanna-astro/data_pipeline.git
 cd data_pipeline
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate
-
-# Install packages (NO packages as of now)
-# pip install -r requirements.txt
+source venv/bin/activate 
+# source venv/Scripts/activate for Windows if needed
+pip install -r requirements.txt
+python manage.py runserver
 ```
 
-### Step 2: Configure Environment
-
-```bash
-# Copy environment template
-cp .env.example .env
-
-# Edit with your credentials
-nano .env  # or use your preferred editor
-```
-
-**Required environment variables**:
-```bash
-# databricks Unity Catalog
-DATABRICKS_WORKSPACE_URL=https://your-workspace.cloud.databricks.com
-DATABRICKS_TOKEN=dapi-your-token
-
-# tigerGraph
-TIGERGRAPH_HOST=https://your-tigergraph.com
-TIGERGRAPH_GRAPH_NAME=EcommerceGraph
-TIGERGRAPH_USERNAME=tigergraph
-```
-
-### Step 3: Configure Mappings
-
-Esnure `config/table_mappings.yaml` match tables in both Iceberg and also in TigerGraph (type conversions).
-
-### Step 4: Run Pipeline
-
-```bash
-# Basic run
-python main.py
-```
-
-### Step 5: Monitor Progress
-
-Confirm that all the rows from Iceberg Tables have been transformed into vertices and edges in TigerGraph DB clusters.
-
-```python
-TigerGraph Compatible Data: {'vertices': [], 'edges': [{'e_type': 'PURCHASED', 'from_type': 'User', 'from_id': '1', 'to_type': 'Product', 'to_id': '5003', 'attributes': {'transaction_id': '103', 'amount': 15.99, 'timestamp': '2024-03-02 09:20:00'}}, {'e_type': 'PURCHASED', 'from_type': 'User', 'from_id': '3', 'to_type': 'Product', 'to_id': '5001', 'attributes': {'transaction_id': '104', 'amount': 1299.99, 'timestamp': '2024-03-03 16:00:00'}}]}
-
-Upserting 2 PURCHASED edges
-
-Sample: User(1) -[PURCHASED]-> Product(5003)
-
-PURCHASED: 2 edges
-
-Batch pushed to TigerGraph
-```
-
-## Design Overview
-
-### Architecture Diagram
-
+## Design Decision
 
 ### Data Flow (Step-by-Step)
 
 ```
 1. Unity Catalog Query
-   └─> Fetch metadata: schema, S3 location, columns
+   └─> Fetch table metadata (schema, partitions, snapshot IDs)
 
 2. Iceberg Read (Spark)
-   └─> Read (Parquet/CSV) files from S3 in parallel
+   └─> Parallel read from S3 using snapshot isolation
 
 3. Transform (Mapping Engine)
-   ├─> Convert types
-   ├─> Create vertices (User, Product)
-   └─> Create edges (PURCHASED)
+   ├─> Enforce type compatibility through maping (Iceberg → TigerGraph)
+   ├─> Vertex generation (User, Product)
+   └─> Edge generation (PURCHASED)
 
 4. Load to TigerGraph
-   ├─> Option A: REST++ API (< 10M records)
-   │   └─> Direct HTTP POST
-   └─> Option B: GSQL Job (under construction)
-       ├─> Write CSV to S3
-       ├─> Create GSQL loading job
-       └─> Execute bulk load (100x faster!)
+   ├─> REST++ API (micro-batch or batch)
+   └─> GSQL Loading Jobs (bulk ingestion / backfills)
 
-5. Validation
-   └─> Try to query TigerGraph and match total count
+5. Validation & Monitoring
+   ├─> Count reconciliation
+   ├─> Checkpointing / snapshot validation
+   └─> Error logging & retries
 ```
 ---
 
-## Architecture Tradeoffs
+## Architecture Tradeoffs and Design Decisions
 
-### 1. Batch vs. Streaming
-
-**my Choice: Batch Processing**
-
-I have used micro-batch and batch processing implementation frameworks. This means that the pipeline does not support live-streaming or real-time update that maybe required in many cases.
-However, given the ease of implementation, Iceberg's event-driven limitations, TigerGraph push based APIs and better performance I have chosen this approach. Theferore, my latencies are on higher-sides but achieves good data-ingestion performance with minimal network overheads.
+This section explains the key architectural decisions made while designing the Iceberg-to-TigerGraph data pipeline, along with the tradeoffs involved.
 
 ---
 
-### 2. REST++ API vs. GSQL Loading Jobs
+### 1. Batch vs Streaming
 
-**My Choice: Both (if possible)**
+**Chosen Approach: Batch and Micro-Batching**
 
-**Decision rule**:
-- Go with REST ++ if needed almost real-time updates through micro-batching.
-- Go with GSQL loading jobs for first time migration, or migration on large scales (daily, monthly or yearly)
+The pipeline supports batch and micro-batch processing instead of true real-time streaming.
+
+**Rationale:**
+- Apache Iceberg is snapshot-based and optimized for analytical workloads.
+- Strict streaming requires Kafka-based connectors, which significantly increase development complexity.
+- TigerGraph ingestion is optimized for high-throughput batch or bulk uploads.
+
+**Tradeoff:**
+- Much better throughput, control over fault tolerance, predictability, and operational simplicity.
+- Higher end-to-end latency compared to streaming systems.
+
+**Outcome:**
+- Near-real-time ingestion but tradeoffed with latency.
+- Strong consistency through snapshot-based reads.
+
 ---
 
-### 3. Push (Spark) vs. Pull (Kafka Connect)
+### 2. REST++ API vs GSQL Loading Jobs
 
-**my Choice: Push with Spark**
+**Chosen Approach: Hybrid (REST++ and GSQL)**
 
-**Why push wins**:
-- Hard to implement Iceberg-Kafka Connect connector
-- Kafka would require custom connector development
-- TigerGraph is highly-performant when using batch uploads
-- Spark natively connects well with both Iceberg and TigerGraph
+The ingestion method depends on data volume and latency requirements.
+
+**Decision Rule:**
+- Use REST++ APIs for micro-batches and low-latency updates.
+- Use GSQL loading jobs for initial loads, backfills, and large-scale ingestion.
+
+**Why this works:**
+- REST++ APIs are simple and suitable for small to medium payloads.
+- GSQL loading jobs are significantly faster (10x–100x) for bulk ingestion (> 10 Million).
+- Enable large-scale migrations.
+
 ---
 
-### 5. Micro-Batching vs. Full Load
+### 3. Push-Based Ingestion vs Pull-Based (Kafka)
 
-**my Choice: both (if possible)**
+**Chosen Approach: Push-Based Ingestion using Spark**
 
-**Why I implemented micro-batching**:
-- Memory-efficient
-- Almost Real Time
-- Enables parallelization
+**Why push-based ingestion was selected:**
+- Iceberg-to-Kafka CDC connectors are complex and not natively available.
+- Kafka-based solutions require custom connector development.
+- Spark integrates natively with Iceberg, S3, and supports parallel execution.
+- TigerGraph performs best when data is pushed in bulk.
+
+**Planned Enhancements:**
+- Spark jobs are centrally orchestrated and monitored.
+- Retry and failure handling are managed at the Spark job level.
+
+---
+
+### 4. Micro-Batching vs Full Load
+
+**Chosen Approach: Both**
+
+**Micro-Batching:**
+- Enables near-real-time updates.
+- Reduces memory pressure.
+- Allows parallel processing of incremental changes.
+
+**Full Loads:**
+- Used for initial ingestion and backfills.
+- Required when schemas change significantly.
+- Guarantees a clean rebuild of the graph.
+- Scales much better computationally for extremely large datasets (> 10 Million)
+
+---
+
+### 5. Fault Tolerance (Mainly Spark Layer)
+
+**Design Considerations:**
+- Spark retries failed tasks automatically.
+- Iceberg snapshot isolation prevents partial reads.
+- Job failures do not corrupt source data.
+- Spark recreates the state upon job or node failures using lineage graphs.
+- For complex task dependencies, disk persistency can be utilized.
+
+**Planned Enhancements:**
+- Persist last processed snapshot ID or timestamp through checkpoints (S3 uploads).
+- Resume ingestion from the last successful checkpoint.
+
+---
+
+### 6. Idempotency Guarantees
+
+**How idempotency is achieved:**
+- Vertex IDs are derived from primary keys ensuring uniqueness.
+- Edge uniqueness is enforced using (from_id, to_id).
+- Reprocessing the same snapshot produces identical graph state.
+
+**Result:**
+- Safe retries without creating duplicate vertices or edges.
+- May lead to stale tigergraph DB data in case of failures.
+
+---
+
+### 7. Scalability Strategy
+
+**Scaling by Layer:**
+
+- Spark:
+  - Horizontal scaling using multiple executors.
+  - Partitioning based on Iceberg metadata.
+  - Parallel reads from Iceberg and writes to TigerGraph.
+  - Strong native support for Apache Iceberg.
+
+- Iceberg:
+  - Snapshot-based incremental reads.
+  - Efficient partitioned storage in S3.
+
+- TigerGraph:
+  - REST++ for bounded ingestion (parallelization possible).
+  - GSQL loading jobs for large-scale ingestion.
+
+---
+
+### 8. Data Consistency and Validation
+
+**Consistency Guarantees:**
+- Snapshot-based reads ensure consistent views of data.
+
+**Validation Steps:**
+- Count validation between Iceberg and Tigergraph.
+- Post-ingestion graph queries for verification.
+
+---
+
+### 9. Known Limitations
+
+- No true real-time streaming support.
+- REST++ APIs are not suitable for very large datasets.
+
+---
+
+## Development notes & next steps
+
+- Migrate mapping definitions to YAML (e.g., `config/table_mappings.yaml`) so new tables can be added without code changes.
+- Replace mocks with real clients:
+  - Unity Catalog & Databricks Spark integration (use databricks-connect or a cluster job)
+  - Replace TigerGraph mock with REST++ or gsql loading jobs (consider batching and bulk loaders)
+- Check and implement idempotency and deduplication for edges.
+- Add retries, dead-letter queues and exponential backoff when calling external services.
+- Improve error handling and structured logging (replace prints with a logger).
 
 ---
 

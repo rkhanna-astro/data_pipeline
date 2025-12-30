@@ -4,9 +4,10 @@ class TigerGraphService:
     def __init__(self):
         self.vertices: Dict[str, Dict[str, Dict]] = {}
 
+        # EdgeType -> List[edge]
         self.edges: Dict[str, List[Dict]] = {}
 
-    def load_vertices(self, payload: Dict):
+    def upsert_vertices(self, payload: Dict):
         """
         Payload format:
         {
@@ -21,13 +22,15 @@ class TigerGraphService:
         print("Payload", payload)
         vertices_payload = payload.get("vertices", {})
 
-        for vtype, vertices in vertices_payload.items():
-            self.vertices.setdefault(vtype, {})
+        for v_type, vertices in vertices_payload.items():
+            self.vertices.setdefault(v_type, [])
 
-            for vid, attributes in vertices.items():
-                self.vertices[vtype][vid] = attributes or {}
-        
-        print("Vertices", self.vertices)
+            for v_id, attributes in vertices.items():
+                self.vertices[v_type].append({
+                    'v_type': v_type,
+                    'v_id': v_id,
+                    'attributes': attributes or {}
+                })
 
         return {
             "status": "OK",
@@ -35,7 +38,7 @@ class TigerGraphService:
             "count": sum(len(v) for v in vertices_payload.values()),
         }
 
-    def load_edges(self, payload: Dict):
+    def upsert_edges(self, payload: Dict):
         """
         Payload format:
         {
@@ -59,6 +62,8 @@ class TigerGraphService:
 
             for e in edges:
                 self.edges[etype].append({
+                    "e_type": etype,
+                    "directed": False,
                     "from_type": e["from_type"],
                     "from_id": e["from_id"],
                     "to_type": e["to_type"],
