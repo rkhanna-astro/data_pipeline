@@ -1,43 +1,32 @@
-USE GRAPH EcommerceGraph
-
--- User vertex: represents a customer
+// User vertex: represents a customer
 CREATE VERTEX User (
     PRIMARY_ID user_id STRING,
-    username STRING,
+    name STRING,
     email STRING,
-    created_at DATETIME,
-    country STRING,
-    -- Future attributes can be added via SCHEMA_CHANGE JOB
-    -- INDEX can be added on frequently queried attributes
+    updated_at DATETIME,
 ) WITH primary_id_as_attribute="true";
 
--- Product vertex: represents an item for sale
+// Product vertex: represents an item for sale
 CREATE VERTEX Product (
     PRIMARY_ID product_id STRING,
     name STRING,
-    category STRING,
-    price DOUBLE
+    price DOUBLE,
+    updated_at DATETIME
 ) WITH primary_id_as_attribute="true";
 
--- -------------------------------------------------------------------------
--- EDGE TYPES
--- -------------------------------------------------------------------------
-
--- PURCHASED edge: represents a transaction
+// PURCHASED edge: represents a transaction
 CREATE DIRECTED EDGE Purchased (
     FROM User,
     TO Product,
-    transaction_id STRING,
     amount DOUBLE,
-    timestamp DATETIME
+    ordered_at DATETIME,
+    updated_at DATETIME
 ) WITH REVERSE_EDGE="Purchased_By";
-
--- -------------------------------------------------------------------------
--- GRAPH DEFINITION
--- -------------------------------------------------------------------------
 
 CREATE GRAPH EcommerceGraph (
     User, 
     Product, 
     PURCHASED
 )
+
+USE GRAPH EcommerceGraph
