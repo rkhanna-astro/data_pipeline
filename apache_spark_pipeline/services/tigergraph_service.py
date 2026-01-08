@@ -1,85 +1,72 @@
 from typing import Dict, List
+import pyTigerGraph as tg
 
 class TigerGraphService:
-    def __init__(self):
-        self.vertices: Dict[str, Dict[str, Dict]] = {}
+    def __init__(self, host="http://localhost", graphname="EcommerceGraph",
+                 username="tigergraph", password="tigergraph"):
 
-        # EdgeType -> List[edge]
-        self.edges: Dict[str, List[Dict]] = {}
+        self.conn = tg.TigerGraphConnection(
+            host=host,
+            graphname=graphname,
+            username=username,
+            password=password
+        )
+
+        secret = self.conn.createSecret()
+        self.token = self.conn.getToken(secret)
 
     def upsert_vertices(self, payload: Dict):
-        """
-        Payload format:
-        {
-          "vertices": {
-            "User": {
-              "u1": {"name": "Alice"},
-              "u2": {"name": "Bob"}
-            }
-          }
-        }
-        """
-        print("Payload", payload)
         vertices_payload = payload.get("vertices", {})
 
+        total_count = 0
+        print("Payload", vertices_payload)
         for v_type, vertices in vertices_payload.items():
-            self.vertices.setdefault(v_type, [])
-
-            for v_id, attributes in vertices.items():
-                self.vertices[v_type].append({
-                    'v_type': v_type,
-                    'v_id': v_id,
-                    'attributes': attributes or {}
-                })
+            print("THESE are vertices", v_type)
+            self.conn.upsertVertices(v_type, vertices)
+            total_count += len(vertices)
 
         return {
             "status": "OK",
             "vertex_types": list(vertices_payload.keys()),
-            "count": sum(len(v) for v in vertices_payload.values()),
+            "count": total_count,
         }
 
     def upsert_edges(self, payload: Dict):
-        """
-        Payload format:
-        {
-          "edges": {
-            "PURCHASED": [
-              {
-                "from_type": "User",
-                "from_id": "u1",
-                "to_type": "Product",
-                "to_id": "p1",
-                "attributes": {"amount": 10}
-              }
-            ]
-          }
-        }
-        """
         edges_payload = payload.get("edges", {})
 
+        total_count = 0
         for etype, edges in edges_payload.items():
-            self.edges.setdefault(etype, [])
-
-            for e in edges:
-                self.edges[etype].append({
-                    "e_type": etype,
-                    "directed": False,
-                    "from_type": e["from_type"],
-                    "from_id": e["from_id"],
-                    "to_type": e["to_type"],
-                    "to_id": e["to_id"],
-                    "attributes": e.get("attributes", {}),
-                })
+            formatted_edges = [
+                (e["from_id"], e["to_id"], e.get("attributes", {}))
+                for e in edges
+            ]
+            print("Formatted_Edges", formatted_edges)
+            # Get the source/target types from first edge
+            if edges:
+                src_type = edges[0]["from_type"]
+                tgt_type = edges[0]["to_type"]
+                self.conn.upsertEdges(src_type, etype, tgt_type, formatted_edges)
+                total_count += len(edges)
 
         return {
             "status": "OK",
             "edge_types": list(edges_payload.keys()),
-            "count": sum(len(e) for e in edges_payload.values()),
+            "count": total_count,
         }
-    
+
     def fetch_vertices(self, vtype: str):
-        print("Vertices", self.vertices)
-        return self.vertices.get(vtype, {})
+        vertices =  self.conn.getVertices(vtype)
+        print("returned vertices", vertices)
+        return vertices
 
     def fetch_edges(self, etype: str):
-        return self.edges.get(etype, [])
+ 
+        all_edges = []
+        for vtype in self.conn.getVertexTypes():
+            print("vertice Type", vtype)
+            vertices = self.conn.getVertices(vtype)
+            print("Formatted_Edges", vertices)
+            for vid in vertices:
+                edges = self.conn.getEdges(vtype, vid['v_id'], etype)
+                all_edges.extend(edges)
+        return all_edges

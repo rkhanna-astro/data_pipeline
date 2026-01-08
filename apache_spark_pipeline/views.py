@@ -38,4 +38,4 @@ def products(request):
 
 def purchases(request):
     tg = TIGERGRAPH_CLIENT
-    return JsonResponse(tg.fetch_edges("PURCHASED"), safe=False)
+    return JsonResponse(tg.fetch_edges("Purchased"), safe=False)

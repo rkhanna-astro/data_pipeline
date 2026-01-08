@@ -3,8 +3,8 @@ CREATE VERTEX User (
     PRIMARY_ID user_id STRING,
     name STRING,
     email STRING,
-    updated_at DATETIME,
-) WITH primary_id_as_attribute="true";
+    updated_at DATETIME
+) WITH primary_id_as_attribute="true"
 
 // Product vertex: represents an item for sale
 CREATE VERTEX Product (
@@ -12,7 +12,7 @@ CREATE VERTEX Product (
     name STRING,
     price DOUBLE,
     updated_at DATETIME
-) WITH primary_id_as_attribute="true";
+) WITH primary_id_as_attribute="true"
 
 // PURCHASED edge: represents a transaction
 CREATE DIRECTED EDGE Purchased (
@@ -21,12 +21,7 @@ CREATE DIRECTED EDGE Purchased (
     amount DOUBLE,
     ordered_at DATETIME,
     updated_at DATETIME
-) WITH REVERSE_EDGE="Purchased_By";
+) WITH REVERSE_EDGE="Purchased_By"
 
-CREATE GRAPH EcommerceGraph (
-    User, 
-    Product, 
-    PURCHASED
-)
-
-USE GRAPH EcommerceGraph
+// Create graph
+CREATE GRAPH EcommerceGraph (*)

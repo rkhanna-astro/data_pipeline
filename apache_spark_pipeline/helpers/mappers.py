@@ -28,7 +28,7 @@ PRODUCT_VERTEX = VertexMapping(
 
 PURCHASE_EDGE = EdgeMapping(
     table="purchases",
-    edge_type="PURCHASED",
+    edge_type="Purchased",
     from_vertex_type="User",
     to_vertex_type="Product",
     from_id="user_id",

@@ -26,25 +26,19 @@
     product_id: string
     price: double
   
-  # -----------------------------------------------------------------------
-  # Edge Mappings
-  # -----------------------------------------------------------------------
-  
-- table: "main.ecommerce.transactions"
+- table: "main.ecommerce.purchases"
   type: edge
-  edge_type: PURCHASED
+  edge_type: Purchased
   from_vertex_type: User
   to_vertex_type: Product
   from_id: user_id
   to_id: product_id
   attributes:
-    - transaction_id
     - amount
     - timestamp
   type_conversions:
     user_id: string
     product_id: string
-    transaction_id: string
     amount: double
     timestamp: datetime
   

@@ -490,3 +490,10 @@ The ingestion method depends on data volume and latency requirements.
 
 ---
 
+docker load -i ./tigergraph-4.2.2-community-docker-image.tar.gz
+docker run -d --name tigergraph -p 14240:14240 -p 9000:9000 -p 8123:8123 tigergraph/community:4.2.2
+https://github.com/tigergraph/ecosys/blob/master/demos/guru_scripts/docker/README.md
+docker cp /home/player1/data_pipeline/schemas/tigergraph_schema.gsql tigergraph:/tmp/schema.gsql
+docker exec -it tigergraph /bin/bash
+gsql /tmp/schema.gsql
+
