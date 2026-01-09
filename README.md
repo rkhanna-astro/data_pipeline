@@ -299,6 +299,41 @@ pip install -r requirements.txt
 python manage.py runserver
 ```
 
+## TigerGraph Community Installation
+
+Ensure that you download the tigergraph community version from the official channel. Also, ensure that docker client is installed locally.
+
+### Load the downloaded TigerClient Image into docker
+```bash
+docker load -i ./tigergraph-4.2.2-community-docker-image.tar.gz
+```
+
+### Run the image in a Docker Container (tigergraph)
+```bash
+docker run -d --name tigergraph -p 14240:14240 -p 9000:9000 -p 8123:8123 tigergraph/community:4.2.2
+```
+
+### Copy the schema in the project to tigergraph container
+```bash
+docker cp /home/player1/data_pipeline/schemas/tigergraph_schema.gsql tigergraph:/tmp/schema.gsql
+```
+
+### Bash into the tigergraph container and ensure apps are running
+```bash
+docker exec -it tigergraph /bin/bash
+
+gadmin start all
+
+gadmin status
+```
+
+### Run the schema file to create Ecommerce Graph
+```bash
+gsql /tmp/schema.gsql
+```
+
+Now, locally the tigergraph client is up and running. You can use it to test TigerGraph loading jobs, REST++ APIs and GSQL workflows.
+
 ## Design Decision
 
 ### Data Flow (Step-by-Step)
@@ -490,10 +525,4 @@ The ingestion method depends on data volume and latency requirements.
 
 ---
 
-docker load -i ./tigergraph-4.2.2-community-docker-image.tar.gz
-docker run -d --name tigergraph -p 14240:14240 -p 9000:9000 -p 8123:8123 tigergraph/community:4.2.2
-https://github.com/tigergraph/ecosys/blob/master/demos/guru_scripts/docker/README.md
-docker cp /home/player1/data_pipeline/schemas/tigergraph_schema.gsql tigergraph:/tmp/schema.gsql
-docker exec -it tigergraph /bin/bash
-gsql /tmp/schema.gsql
 
